@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: route-sim
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/state
