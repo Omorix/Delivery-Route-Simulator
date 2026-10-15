@@ -1,130 +1,391 @@
 # Delivery Route Simulator
 
-<!-- TODO: demo GIF here (record the Compare view), then the live link -->
-**Live demo:** _add your Render URL here_ (free tier sleeps after 15 min idle; the first load can take about a minute)
+A delivery fleet optimisation and simulation application built with **Java 21**, Spring Boot, and Leaflet. It uses vehicle routing algorithms implemented from scratch — no OptaPlanner or Timefold — and replays delivery routes as a live, discrete-event simulation on an interactive map.
 
-A dispatch simulator in plain Java 21. Orders are routed onto capacity-limited vans by algorithms written from scratch (no OptaPlanner / Timefold), then replayed as a live discrete-event simulation on a Leaflet map.
+**Live demo:** *[Add your Render URL here]*
 
-> **My optimiser cuts total fleet distance by 15-22% vs a greedy nearest-neighbour baseline on seeded scenarios of 50-500 orders, and lands within 2.0% of the true optimum on 10-order instances solved exactly.**
-> CVRPLIB gap: _run the benchmark with the Augerat A files and put the number here_ (see [benchmarks/cvrplib](benchmarks/cvrplib/README.md)).
+> **Optimisation results:** Reduces total fleet distance by approximately 15–22% compared with a greedy nearest-neighbour baseline on seeded scenarios containing 50–500 orders. On 10-order instances solved exactly, the savings-plus-local-search algorithm achieves an average optimality gap of just 2.0%.
+
+> **CVRPLIB benchmark:** *[Add your Augerat A benchmark result here](benchmarks/cvrplib/README.md).*
+
+*Note: The live demo runs on Render's free tier, which may sleep after 15 minutes of inactivity. The first request after sleeping can take around a minute.*
+
+<!-- TODO: Add a demo GIF showing the Compare view. -->
 
 ## Results
 
-### Seeded random scenarios (Haversine km, van capacity 100, parcels 1-10, mean of 5 seeds)
+### Seeded random scenarios
 
-| Orders | Greedy km | Savings km | Savings+LS km | Savings vs greedy | Savings+LS vs greedy | Greedy ms | Savings ms | Savings+LS ms | Vans (greedy / S+LS) |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 50 | 215.9 | 187.5 | 182.8 | -13.2% | -15.4% | 0.9 | 0.5 | 2.2 | 3.2 / 3.4 |
-| 100 | 355.9 | 282.4 | 276.4 | -20.7% | -22.3% | 2.0 | 1.5 | 8.9 | 6.0 / 6.4 |
-| 200 | 562.4 | 462.1 | 450.9 | -17.8% | -19.8% | 1.3 | 10.6 | 26.8 | 11.4 / 11.6 |
-| 500 | 1114.8 | 911.9 | 896.1 | -18.2% | -19.6% | 5.0 | 118.0 | 177.9 | 28.0 / 28.4 |
+Results use Haversine distances in kilometres, a van capacity of 100, parcel sizes between 1 and 10, and the mean of five random seeds.
 
-Distances are straight-line (Haversine) km. Runtimes are from one laptop-class machine, single thread, after JIT warm-up; run it yourself for your own numbers. Local search is capped at 5 s, which none of these runs hit.
-The extra van or so that savings+LS sometimes uses is the optimiser trading a van for distance; the solvers don't cap fleet size.
+| Orders | Greedy (km) | Savings (km) | Savings + LS (km) | Savings vs. Greedy | Savings + LS vs. Greedy | Greedy (ms) | Savings (ms) | Savings + LS (ms) | Vans (Greedy / S+LS) |
+|-------:|------------:|-------------:|------------------:|-------------------:|------------------------:|------------:|-------------:|-------------------:|---------------------:|
+| 50    | 215.9 | 187.5 | 182.8 | -13.2% | -15.4% | 0.9 | 0.5 | 2.2 | 3.2 / 3.4 |
+| 100   | 355.9 | 282.4 | 276.4 | -20.7% | -22.3% | 2.0 | 1.5 | 8.9 | 6.0 / 6.4 |
+| 200   | 562.4 | 462.1 | 450.9 | -17.8% | -19.8% | 1.3 | 10.6 | 26.8 | 11.4 / 11.6 |
+| 500   | 1114.8 | 911.9 | 896.1 | -18.2% | -19.6% | 5.0 | 118.0 | 177.9 | 28.0 / 28.4 |
 
-**How close to optimal?** For 10 orders the true optimum can be found exactly (subset DP, in `OptimalityGapTest`). Mean over 30 seeded instances, van capacity 30:
+**Benchmark notes:**
 
-| Greedy | Savings | Savings + local search |
-|---:|---:|---:|
-| +21.5% above optimum | +3.0% | **+2.0%** |
+- Distances are straight-line Haversine distances, not road distances.
+- Runtimes were measured on a laptop-class machine, using a single thread after JIT warm-up. Results may vary by hardware and JVM.
+- Local search has a five-second time limit, which none of these runs reached.
+- Savings-based algorithms may use an additional van to reduce total distance. Fleet size is not capped.
 
-Reproduce: `mvn test -Dtest=OptimalityGapTest` (prints the line) and `java -cp target/classes dev.routesim.bench.BenchmarkRunner`.
+### How close to optimal?
 
-## Run it
+For instances containing 10 orders, the true optimum can be calculated exactly using subset dynamic programming, implemented in `OptimalityGapTest`.
+
+Results are averaged over 30 seeded instances with a van capacity of 30.
+
+| Algorithm | Average distance above optimum |
+|-----------|-------------------------------:|
+| Greedy | +21.5% |
+| Clarke–Wright Savings | +3.0% |
+| Savings + Local Search | **+2.0%** |
+
+Reproduce these results locally:
 
 ```bash
-mvn spring-boot:run            # http://localhost:8080
-mvn verify                     # all tests
-docker build -t route-sim . && docker run -p 8080:8080 route-sim
-mvn -q package -DskipTests && java -cp target/classes dev.routesim.bench.BenchmarkRunner
+mvn test -Dtest=OptimalityGapTest
+java -cp target/classes dev.routesim.bench.BenchmarkRunner
 ```
 
-In the UI: pick an algorithm, press **Start**, and click the map to add orders while vans are moving. They are inserted live into the cheapest route that can take them. **Compare on this scenario** shows greedy and optimised side by side on the same orders.
+The test prints the optimality-gap results. Run the benchmark runner separately to evaluate larger scenarios.
+
+## Features
+
+- **Multiple routing algorithms:** Compare greedy nearest-neighbour, Clarke–Wright savings, and savings with local search.
+- **Interactive fleet simulation:** Watch vans travel between stops on a Leaflet map.
+- **Live order insertion:** Click the map to add orders while the simulation is running.
+- **Route comparison:** Compare greedy and optimised solutions on the same scenario.
+- **Capacity constraints:** Every route respects the configured van capacity.
+- **Reproducible benchmarks:** Generate deterministic scenarios using random seeds.
+- **Exact optimality evaluation:** Compare heuristic solutions against an exact solver on small instances.
+- **CVRPLIB support:** Parse benchmark instances in `.vrp` format for comparison with published best-known solutions.
+
+## Getting Started
+
+### Prerequisites
+
+- Java 21 or later
+- Maven
+- Docker (optional)
+
+### Run locally
+
+Start the Spring Boot application:
+
+```bash
+mvn spring-boot:run
+```
+
+Open [http://localhost:8080](http://localhost:8080) in your browser.
+
+### Run the tests
+
+```bash
+mvn verify
+```
+
+### Run with Docker
+
+```bash
+docker build -t route-sim .
+docker run -p 8080:8080 route-sim
+```
+
+### Run the benchmark
+
+```bash
+mvn -q package -DskipTests
+java -cp target/classes dev.routesim.bench.BenchmarkRunner
+```
+
+### Using the application
+
+1. Select a routing algorithm.
+2. Generate or configure a delivery scenario.
+3. Press **Start** to begin the simulation.
+4. Click the map to add orders while vans are moving.
+5. Use **Compare on this scenario** to compare greedy and optimised routes using the same orders.
+
+New orders are inserted into the cheapest feasible route. If no existing van can accommodate an order, an idle van is activated or a new van is dispatched.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    UI[Leaflet page]
-  end
-  subgraph "Spring Boot (dev.routesim.web)"
-    API[REST controller]
-    WS[WebSocket /ws]
-    SVC[SimulationService]
-  end
-  subgraph "Pure Java core"
-    SIM[Simulation - event queue]
-    RUN[SimulationRunner - ScheduledExecutorService]
-    SOL[Solvers: greedy / savings / savings+LS]
-    MOD[Problem, Route, Solution]
-  end
-  UI -- "POST orders, start, algorithm" --> API --> SVC
-  SVC --> SIM
-  RUN -- "advance(dt) every 200 ms" --> SIM
-  SIM -- "plan at t=0" --> SOL --> MOD
-  RUN -- "snapshot" --> WS -- "van positions + stats" --> UI
+    subgraph Browser
+        UI[Leaflet UI]
+    end
+
+    subgraph Web["Spring Boot - dev.routesim.web"]
+        API[REST Controller]
+        WS[WebSocket /ws]
+        SVC[SimulationService]
+    end
+
+    subgraph Core["Pure Java Core"]
+        SIM[Simulation - Event Queue]
+        RUN[SimulationRunner - ScheduledExecutorService]
+        SOL[Solvers: Greedy / Savings / Savings + LS]
+        MOD[Problem / Route / Solution]
+    end
+
+    UI -->|REST requests| API
+    API --> SVC
+    SVC --> SIM
+    RUN -->|advance dt every 200 ms| SIM
+    SIM -->|Initial planning| SOL
+    SOL --> MOD
+    RUN -->|Simulation snapshots| WS
+    WS -->|Van positions and statistics| UI
 ```
 
-Everything under `model/`, `solver/`, `sim/` and `bench/` has no Spring dependency, so it is unit-tested in milliseconds and the benchmark runs without a server.
+### Project structure
 
-## What's implemented
+The core components are separated from the web layer:
 
-- **Greedy baseline** (`NearestNeighbourSolver`): fill one van at a time with the nearest order that still fits.
-- **Clarke-Wright savings** (`ClarkeWrightSolver`): start with one van per order; merge routes in order of largest saving `d(0,i) + d(0,j) - d(i,j)` whenever `i` and `j` are route ends and the load fits.
-- **Local search** (`LocalSearch`): 2-opt inside a route, relocate (within/between routes), swap between routes, and 2-opt* (exchange route tails). First improvement, capacity-checked, so it can never worsen a solution or break feasibility.
-- **Hard rules, tested**: every order delivered exactly once, no van over capacity, every route starts and ends at the depot (`Solution.validate`, plus the same rules spelled out independently in `SolverInvariantsTest`).
-- **Reproducible scenarios**: `ScenarioGenerator` is seeded; same seed gives the same orders.
-- **CVRPLIB reader**: `CvrplibParser` reads `.vrp` files (EUC_2D, rounded like CVRPLIB) so costs compare directly with published best-known values.
-- **Simulation**: a `PriorityQueue` of timed events (`DEPART`, `ARRIVE`), a sim clock with a speed multiplier, run by a `ScheduledExecutorService`.
-- **Dynamic orders**: a new order is tried at every legal insertion point of every van and goes where it adds the least distance; if no van can take it, an idle van is woken or a new one dispatched. A van that is heading home is turned around where it is.
+- `model/` — routing problems, routes, and solutions.
+- `solver/` — optimisation algorithms and local-search operators.
+- `sim/` — discrete-event simulation and execution.
+- `bench/` — benchmark runners and CVRPLIB support.
+- `web/` — Spring Boot REST and WebSocket integration.
 
-## API
+The model, solver, simulation, and benchmark layers have no Spring dependency. This allows the core algorithms to be unit-tested quickly and benchmarked without starting a server.
 
-| Method | Path | Body | Does |
-|---|---|---|---|
-| GET | `/api/state` | | snapshot, plan (routes, orders, depot), running flag |
-| GET | `/api/compare` | | greedy vs savings+LS on the current orders |
-| POST | `/api/scenario/random` | `{"seed":1,"orders":40}` | new seeded random scenario |
-| POST | `/api/scenario/clear` | | remove all orders |
-| POST | `/api/scenario/depot` | `{"lat":..,"lng":..}` | move the depot (re-plans) |
-| POST | `/api/orders` | `{"lat":..,"lng":..,"size":5}` | add an order (live insertion if the clock has started) |
-| POST | `/api/sim/start` `/pause` `/reset` | | control the clock |
-| POST | `/api/sim/speed` | `{"multiplier":60}` | simulated seconds per real second |
-| POST | `/api/algorithm` | `{"name":"greedy"\|"savings"\|"savings+ls"}` | switch algorithm; re-plans the same orders from t=0 |
+## Routing Algorithms
 
-`/ws` pushes `{snapshot, running, speed}` every 200 ms. When `snapshot.planVersion` changes, the page re-fetches `/api/state` for the new routes.
+### 1. Greedy nearest neighbour
 
-## Design decisions
+**Class:** `NearestNeighbourSolver`
 
-**Why Clarke-Wright?** It is the classic constructive heuristic for capacitated routing: simple to explain, O(n^2 log n), deterministic, and typically a few percent from optimal. Starting local search from a good solution is far better than from a random one, and the improvement over the baseline is easy to demonstrate.
+Builds routes one van at a time, repeatedly selecting the nearest undelivered order that fits within the remaining capacity.
 
-**Why these local-search moves?** 2-opt removes crossings within a route; relocate and swap rebalance stops between vans; 2-opt* targets the awkward route tails that merging can leave behind (a design intent; I haven't run an ablation per move). Together they make the result 1.5-2.5% shorter than savings alone in the table above.
+This provides a simple baseline for evaluating more advanced optimisation strategies.
 
-**Why event-driven?** Vans spend most of their time driving; nothing happens between "departed" and "arrived". Jumping the clock from event to event is exact (no accumulated tick error), independent of step size (tested: stepping by 1 s or by 20 000 s gives the same result), and cheap. The real-time part is a thin runner that calls `advance(dt)`.
+### 2. Clarke–Wright savings
 
-**Why is the simulation decoupled from Spring and the wall clock?** So it is deterministic and testable without sleeping, threads or a server.
+**Class:** `ClarkeWrightSolver`
 
-**Why a distance matrix?** Solvers do millions of distance lookups; Haversine is computed once per pair.
+Starts with one route per order and calculates the savings from merging pairs of routes:
 
-## Assumptions and limits
+\[
+s(i,j) = d(0,i) + d(0,j) - d(i,j)
+\]
 
-- Routes are **straight lines** between stops, not roads. Real road distances would need a routing engine (see next steps).
-- One depot, identical vans, no cap on the number of vans, no time windows.
-- A live order's parcel is assumed to be handed to a moving van (e.g. by a courier). The capacity rule is still the hard one: all parcels ever assigned to a van must fit.
-- Switching algorithm, moving the depot or generating a scenario resets the clock to t=0.
-- One shared simulation per server: everyone who opens the page watches the same fleet.
-- Map tiles come from the public OpenStreetMap tile server (no key needed), shown in greyscale so the routes stand out. Fine for a demo, but OSM's tile usage policy rules out heavy traffic; switch to a keyed provider if the project gets real use.
+Here, `0` represents the depot, and `i` and `j` represent delivery locations.
 
-## Next steps
+Routes are merged in descending order of savings when both locations are eligible route endpoints and the combined load respects vehicle capacity.
 
-- Delivery time windows (VRPTW): feasibility checks on arrival times in every move.
-- Real road distances and geometry via OSRM, replacing the Haversine matrix.
-- Multiple depots, heterogeneous fleet, driver shifts.
-- Stronger metaheuristic (e.g. simulated annealing / ILS) to close the remaining gap.
+### 3. Local search
 
-## Deploy (free tier)
+**Class:** `LocalSearch`
 
-`render.yaml` is a Render Blueprint (`runtime: docker`, `plan: free`). Render's free web service has 512 MB RAM, sleeps after 15 minutes without traffic and takes about a minute to wake; the Dockerfile caps the JVM heap for that reason. Check Render's current pricing page before relying on it.
-#   D e l i v e r y - R o u t e - S i m u l a t o r  
- 
+Improves the Clarke–Wright solution using four neighbourhood operations:
+
+- **2-opt:** Removes inefficient edge crossings within a route.
+- **Relocate:** Moves a stop within or between routes.
+- **Swap:** Exchanges stops between routes.
+- **2-opt\*:** Exchanges route tails between two routes.
+
+The implementation uses a first-improvement strategy and checks capacity constraints. Accepted moves must improve the objective, so local search does not worsen the initial solution.
+
+Together, these operators improve the quality of the savings-based solution while preserving feasibility.
+
+## Simulation Engine
+
+The simulation is event-driven rather than based on fixed movement ticks.
+
+- A `PriorityQueue` stores timed events such as `DEPART` and `ARRIVE`.
+- A simulation clock tracks elapsed simulated time.
+- A speed multiplier controls how quickly simulated time advances.
+- A `ScheduledExecutorService` advances the simulation every 200 milliseconds.
+- Simulation snapshots are sent to the browser over WebSocket.
+
+Because the engine advances between scheduled events, it avoids unnecessary work while vans are travelling. Its deterministic clock also makes it possible to test simulation behaviour without relying on real-time delays.
+
+### Dynamic order insertion
+
+When a new order arrives during a simulation:
+
+1. Every legal insertion position in each van's route is evaluated.
+2. Feasible insertions are compared by their additional distance.
+3. The order is assigned to the lowest-cost feasible insertion.
+4. If no existing van can take the order, an idle van is activated or a new van is dispatched.
+5. A van heading back to the depot can be redirected before completing its return.
+
+The capacity constraint remains a hard rule: all parcels assigned to a van must fit within its capacity.
+
+## API Reference
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/state` | Returns the current snapshot, plan, routes, orders, depot, and running status. |
+| `GET` | `/api/compare` | Compares greedy and savings-plus-local-search solutions for the current orders. |
+| `POST` | `/api/scenario/random` | Generates a seeded random scenario. |
+| `POST` | `/api/scenario/clear` | Removes all orders. |
+| `POST` | `/api/scenario/depot` | Moves the depot and replans routes. |
+| `POST` | `/api/orders` | Adds an order, including live insertion after the simulation starts. |
+| `POST` | `/api/sim/start` | Starts the simulation. |
+| `POST` | `/api/sim/pause` | Pauses the simulation. |
+| `POST` | `/api/sim/reset` | Resets the simulation. |
+| `POST` | `/api/sim/speed` | Changes the simulation speed multiplier. |
+| `POST` | `/api/algorithm` | Changes the routing algorithm and replans the same orders from time zero. |
+
+### Example request bodies
+
+Generate a random scenario:
+
+```json
+{
+  "seed": 1,
+  "orders": 40
+}
+```
+
+Move the depot:
+
+```json
+{
+  "lat": 51.5074,
+  "lng": -0.1278
+}
+```
+
+Add an order:
+
+```json
+{
+  "lat": 51.515,
+  "lng": -0.09,
+  "size": 5
+}
+```
+
+Set the simulation speed:
+
+```json
+{
+  "multiplier": 60
+}
+```
+
+Select a routing algorithm:
+
+```json
+{
+  "name": "savings+ls"
+}
+```
+
+Supported algorithm names are `greedy`, `savings`, and `savings+ls`.
+
+### WebSocket
+
+**Endpoint:** `/ws`
+
+The server pushes a message containing `{ snapshot, running, speed }` approximately every 200 milliseconds.
+
+When `snapshot.planVersion` changes, the frontend fetches `/api/state` to retrieve the updated routes.
+
+## Design Decisions
+
+### Why Clarke–Wright savings?
+
+Clarke–Wright is a classic constructive heuristic for the Capacitated Vehicle Routing Problem (CVRP). It is deterministic, relatively inexpensive to compute, and produces a useful starting solution for local search.
+
+Its route-merging logic is also straightforward to explain and benchmark against a greedy baseline.
+
+### Why these local-search operations?
+
+Each operation addresses a different weakness in the initial solution:
+
+- 2-opt improves stop ordering within a route.
+- Relocate and swap rebalance deliveries between vans.
+- 2-opt\* exchanges route tails to improve the structure of multiple routes.
+
+The combined approach produces shorter routes than savings alone in the reported experiments. The individual contribution of each move has not yet been measured through a separate ablation study.
+
+### Why an event-driven simulation?
+
+A van travelling between stops does not require a discrete update every simulated second. Most meaningful changes occur at departure and arrival events.
+
+Advancing directly between events avoids unnecessary computation and eliminates accumulated fixed-tick error. The simulation engine is also tested for consistent results across different clock-advance intervals.
+
+### Why separate the simulation from Spring Boot?
+
+The routing algorithms and simulation engine do not need a web server, network requests, or wall-clock sleeps to operate.
+
+Keeping them independent makes the core deterministic, easier to test, and reusable from benchmark tools.
+
+### Why precompute a distance matrix?
+
+Routing algorithms perform many repeated distance lookups. Precomputing pairwise distances avoids repeatedly calculating Haversine distances during route construction and local search.
+
+## Correctness and Testing
+
+The implementation enforces several core invariants:
+
+- Every order is delivered exactly once.
+- No van exceeds its capacity.
+- Every route begins and ends at the depot.
+- Local-search moves preserve route feasibility.
+- Scenario generation is deterministic for a given seed.
+- Simulation results remain consistent across different clock-advance intervals.
+
+These invariants are checked by `Solution.validate` and independently tested in `SolverInvariantsTest`, alongside the other unit and integration tests.
+
+Run the full suite with:
+
+```bash
+mvn verify
+```
+
+## Assumptions and Limitations
+
+- **Straight-line distances:** Routes use Haversine distances between stops, not actual road distances or driving times.
+- **Single depot:** The simulator currently supports one depot.
+- **Homogeneous fleet:** All vans share the same capacity.
+- **Unlimited fleet size:** There is no configured maximum number of vans.
+- **No time windows:** Delivery deadlines and time-window constraints are not modelled.
+- **Live parcel handoff:** A new order may be assigned to a moving van, assuming the parcel can be handed over.
+- **Simulation resets:** Changing the algorithm, moving the depot, or generating a new scenario resets simulated time to zero.
+- **Shared server state:** All users accessing the same server instance observe the same simulation.
+- **OpenStreetMap tiles:** The map uses the public OpenStreetMap tile service without an API key. Its usage policy should be respected; a different tile provider may be necessary for heavier usage.
+
+## Deployment
+
+The repository includes a `render.yaml` Blueprint configured for a Docker-based deployment on Render's free tier.
+
+The free web service has historically offered 512 MB of RAM and may sleep after a period of inactivity. The Docker configuration limits JVM heap usage to accommodate the constrained environment.
+
+Check [Render's current pricing and limits](https://render.com/pricing) before deploying or relying on the free tier.
+
+## Roadmap
+
+Potential future improvements include:
+
+- [ ] Vehicle Routing Problem with Time Windows (VRPTW).
+- [ ] Real road distances and route geometry through OSRM.
+- [ ] Multiple depots.
+- [ ] Heterogeneous vehicle capacities.
+- [ ] Driver shifts and working-hour constraints.
+- [ ] Stronger metaheuristics, such as Iterated Local Search or simulated annealing.
+- [ ] Additional CVRPLIB benchmarks and optimality-gap reporting.
+- [ ] Ablation studies to measure the contribution of individual local-search operators.
+
+## Technologies
+
+- **Language:** Java 21
+- **Backend:** Spring Boot
+- **Frontend map:** Leaflet
+- **Communication:** REST API and WebSocket
+- **Build system:** Maven
+- **Deployment:** Docker and Render
+- **Benchmarking:** Custom Java benchmark runner and CVRPLIB instances
+
+## License
+
+Add your chosen license here. If you intend to make this project open source, consider including a `LICENSE` file in the repository.
